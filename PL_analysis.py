@@ -3,9 +3,8 @@ import pandas as pd
 import math
 from datetime import datetime
 
-
 #ToDo: Merge with other dataset to get Match Day
-#ToDo: seperate table with ELO scores #DONE
+#ToDo: seperate table with ELO scores # Done
 #ToDo: Get official play-by-plays
 
 
@@ -16,7 +15,28 @@ from datetime import datetime
 
 # import Premier League Data from season 18/19
 dateparse = lambda x: pd.datetime.strptime(x, '%d/%m/%Y') # define date format for pd read_csv
-df = pd.read_csv("/Users/jjs/Dropbox/Programming/football_gambling/PL_1819.csv", parse_dates=['Date'],date_parser=dateparse)
+
+def merge_data(csv_files, delimiter = ',', dateparser = dateparse, parse_dates = ['Date']):
+    
+    for csv in csv_files:
+        try:
+            df_new = pd.read_csv(csv, parse_dates=parse_dates ,date_parser=dateparser, delimiter=delimiter)
+        except:
+            df_new = pd.read_csv(csv, parse_dates=parse_dates ,date_parser=lambda x: pd.datetime.strptime(x, '%d/%m/%y'), delimiter=delimiter)
+            
+        df_new.season = df_new.Date.max().year
+        df_new['first_match_day'] = False
+        df_new['first_match_day'][0:10] = True
+        
+        try:
+            df = df.append(df_new,sort=False)
+        except:
+            df = df_new
+        
+    return df
+csv_files = ["/Users/jjs/Dropbox/Programming/football_gambling/PL_1718.csv", "/Users/jjs/Dropbox/Programming/football_gambling/PL_1819.csv"]
+#df = pd.read_csv("/Users/jjs/Dropbox/Programming/football_gambling/PL_1819.csv", parse_dates=['Date'],date_parser=dateparse, delimiter=';')
+df = merge_data(csv_files)
 df.Date = pd.to_datetime(df.Date,unit='d') # convert from timestamp to datetime
 df.index = df.Date # define the date as the index
 
@@ -24,11 +44,12 @@ df.index = df.Date # define the date as the index
 df.sort_index(ascending=True)
 
 # Get all PL teams in order of their first match day
-teams = [x for sub in list(zip(df['HomeTeam'][:10],df['AwayTeam'][:10])) for x in sub]
+#teams = [x for sub in list(zip(df['HomeTeam'][:10],df['AwayTeam'][:10])) for x in sub]
+teams = df.HomeTeam.unique()
 
 # define DataFrame 'elo' initialized with some elo initialization value and the date the team played first this season
-elo_start_value = 500
-elo = pd.DataFrame({'Team': teams, 'ELO': len(teams)*[elo_start_value]}, index=20*[datetime.strptime('01-01-2000', '%d-%m-%Y')])
+elo_start_value = 1000
+elo = pd.DataFrame({'Team': teams, 'ELO': len(teams)*[elo_start_value]}, index=len(teams)*[datetime.strptime('01-01-2000', '%d-%m-%Y')])
 elo.index.name = 'Date'
 
 
@@ -60,7 +81,7 @@ def Probability(rating1, rating2):
     """
     return 1.0 * 1.0 / (1 + 1.0 * math.pow(10, 1.0 * (rating1 - rating2) / 400))
 
-def EloRating(homeElo, awayElo, outcome, k=30):
+def EloRating(homeElo, awayElo, outcome, k=20):
     """
     Recalculates elo Ratings for both teams and returns both values
     
@@ -72,8 +93,8 @@ def EloRating(homeElo, awayElo, outcome, k=30):
     
     """
     # calculate winning probability of home and away team
-    Ph = Probability(awayElo, homeElo)
-    Pa = Probability(homeElo, awayElo)
+    Ph = Probability(awayElo*0.95, homeElo*1.05)
+    Pa = Probability(homeElo*1.05, awayElo*0.95)
     
     # update Elo ratings according to outcome
     
@@ -92,10 +113,14 @@ def EloRating(homeElo, awayElo, outcome, k=30):
     return round(homeElo,2), round(awayElo,2)
 
 
-for index,row in df.loc[:,['Date','HomeTeam','AwayTeam','FTR']].iterrows():
+for index,row in df.loc[:,['Date','HomeTeam','AwayTeam','FTR','FTHG','FTAG','first_match_day']].iterrows():
     eloHome = elo.loc[(elo.Team == row[1]) & (elo.index == elo.loc[(elo.Team == row[1])].index.max())].ELO[0]
     eloAway = elo.loc[(elo.Team == row[2]) & (elo.index == elo.loc[(elo.Team == row[2])].index.max())].ELO[0]
-    eloHome, eloAway = EloRating(eloHome, eloAway, row[3])
+    if row[6] == True: # if it's the first match day, adjust elo ratings
+        eloHome = 0.75 * eloHome + 0.25 * elo_start_value
+        eloAway = 0.75 * eloHome + 0.25 * elo_start_value
+    goalDiff = abs(row[4] - row[5])
+    eloHome, eloAway = EloRating(eloHome, eloAway, row[3], k=20 + goalDiff**2)
     elo = elo.append(pd.DataFrame({'Team': [row[1], row[2]], 'ELO': [eloHome,eloAway]}, index=2*[row[0]]))
 
 
