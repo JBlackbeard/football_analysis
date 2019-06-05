@@ -1,3 +1,4 @@
+
 import numpy as np
 import pandas as pd
 import math
@@ -37,7 +38,7 @@ def merge_data(csv_files, delimiter = ',', dateparser = dateparse, parse_dates =
             df_new = pd.read_csv(csv, parse_dates=parse_dates ,date_parser=lambda x: pd.datetime.strptime(x, '%d/%m/%y'), delimiter=delimiter)
             
             
-        df_new["season"] = df_new.Date.max().year # add season column, defined as the year of the last matchday
+        df_new['season'] = df_new.Date.max().year # add season column, defined as the year of the last matchday
         df_new['first_match_day'] = False 
         df_new['first_match_day'][0:10] = True
         df_new['matchDay'] = 0
@@ -65,7 +66,15 @@ teams = df.HomeTeam.unique()
 
 # define DataFrame 'elo' initialized with some elo initialization value and the date the team played first this season
 elo_start_value = 1000
-teamData = pd.DataFrame({'Team': teams, 'goals_scored': len(teams) * [0], 'goals_conceded': len(teams) * [0], 'matchDay': len(teams) * [0], 'ELO': len(teams)*[elo_start_value]}, index=len(teams)*[datetime.strptime('01-01-2000', '%d-%m-%Y')])
+teamData = pd.DataFrame({'Team': teams,
+                         'goals_scored': len(teams) * [0],
+                         'goals_conceded': len(teams) * [0],
+                         'matchDay': len(teams) * [0],
+                         'points': len(teams) * [0],
+                         'avg_points_game': len(teams) * [0],
+                         'season': len(teams) * [0],
+                         'ELO': len(teams)*[elo_start_value]},
+                        index=len(teams)*[datetime.strptime('01-01-2000', '%d-%m-%Y')])
 teamData.index.name = 'Date'
 
 
@@ -129,7 +138,9 @@ def EloRating(homeElo, awayElo, outcome, k=20):
 
 
 
-for index,row in df.loc[:,['Date','HomeTeam','AwayTeam','FTR','FTHG','FTAG','matchDay', 'first_match_day']].iterrows():
+points_mapping_home = {'H': 3, 'D': 1, 'A': 0} # resulting points for each possible game result
+points_mapping_away = {'H': 0, 'D': 1, 'A': 3}
+for index,row in df.loc[:,['Date','HomeTeam','AwayTeam','FTR','FTHG','FTAG','matchDay', 'first_match_day', 'season']].iterrows():
     matching_teamData_home = teamData.loc[(teamData.Team == row[1]) & (teamData.index == teamData.loc[(teamData.Team == row[1])].index.max())]
     matching_teamData_away = teamData.loc[(teamData.Team == row[2]) & (teamData.index == teamData.loc[(teamData.Team == row[2])].index.max())]
     eloHome = matching_teamData_home.ELO[0]
@@ -140,21 +151,34 @@ for index,row in df.loc[:,['Date','HomeTeam','AwayTeam','FTR','FTHG','FTAG','mat
     away_conceded = matching_teamData_away.goals_conceded[0]
     matchday_home = matching_teamData_home.matchDay[0]
     matchday_away = matching_teamData_away.matchDay[0]
+    home_points_old = matching_teamData_home.points[0]
+    away_points_old = matching_teamData_away.points[0]
+    home_result = row[3] # 'H', 'D' or 'A' for Home win, Draw and Away win
+    home_points_new = points_mapping_home[home_result]
+    away_points_new = points_mapping_away[home_result]
     if row[7] == True: # if it's the first match day, adjust elo ratings
-        eloHome = 0.75 * eloHome + 0.25 * elo_start_value
-        eloAway = 0.75 * eloHome + 0.25 * elo_start_value
+        eloHome = 0.9 * eloHome + 0.1 * elo_start_value
+        eloAway = 0.9 * eloHome + 0.1 * elo_start_value
         home_goals = 0
         home_conceded = 0
         away_goals = 0
         away_conceded = 0
         matchday_home = 0
         matchday_away = 0
-        teamData = teamData.append(pd.DataFrame({'Team': [row[1], row[2]], 'goals_scored':0,
+        #home_points_new = 0
+        home_points_old = 0
+        #away_points_new = 0
+        away_points_old = 0
+        teamData = teamData.append(pd.DataFrame({'Team': [row[1], row[2]],
+                                                 'goals_scored':0,
                                                  'goals_conceded':0,
                                                  'ELO': [eloHome,eloAway],
-                                                 'matchDay':[matchday_home, matchday_away],
+                                                 'matchDay':[0, 0],
                                                  'avg_goals_scored': [0,0],
-                                                 'avg_goals_conceded': [0,0]
+                                                 'avg_goals_conceded': [0,0],
+                                                 'points': [0,0],
+                                                 'season': row[8],
+                                                 'avg_points_game': [0,0]
                                                 
                                                 },
                                                 index=2*[row[0]-timedelta(days=14)]), sort=False)
@@ -168,7 +192,10 @@ for index,row in df.loc[:,['Date','HomeTeam','AwayTeam','FTR','FTHG','FTAG','mat
                                              'ELO': [eloHome,eloAway],
                                              'matchDay': [matchday_home+1, matchday_away+1],
                                              'avg_goals_scored': [round((home_goals+row[4])/(matchday_home+1),3), round((away_goals+row[5])/(matchday_away+1),3)],
-                                             'avg_goals_conceded': [round((home_conceded+row[5])/(matchday_home+1),3), round((away_conceded+row[4])/(matchday_away+1),3)]
+                                             'avg_goals_conceded': [round((home_conceded+row[5])/(matchday_home+1),3), round((away_conceded+row[4])/(matchday_away+1),3)],
+                                             'points': [home_points_old + home_points_new, away_points_old + away_points_new],
+                                             'avg_points_game': [round((home_points_old + home_points_new)/(matchday_home+1),3), round((away_points_old + away_points_new)/(matchday_away+1),3)],
+                                             'season': row[8]
                                             },
                                             index=2*[row[0]]),  sort=False)
 
