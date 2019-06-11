@@ -1,4 +1,3 @@
-
 import numpy as np
 import pandas as pd
 import math
@@ -52,10 +51,13 @@ def merge_data(csv_files, delimiter = ',', dateparser = dateparse, parse_dates =
     return df
 wd = "/Users/jjs/Dropbox/Programming/football_gambling/"
 csv_files = [wd + "PL_1617.csv", wd + "PL_1718.csv", wd + "/PL_1819.csv"]
+#csv_files = [wd + "/PL_1617.csv"]
+
+
+
 #df = pd.read_csv("/Users/jjs/Dropbox/Programming/football_gambling/PL_1819.csv", parse_dates=['Date'],date_parser=dateparse, delimiter=';')
 df = merge_data(csv_files)
 df.Date = pd.to_datetime(df.Date,unit='d') # convert from timestamp to datetime
-df.index = df.Date # define the date as the index
 
 # make sure the data is sorted by Date in ascending order
 df.sort_index(ascending=True)
@@ -73,9 +75,9 @@ teamData = pd.DataFrame({'Team': teams,
                          'points': len(teams) * [0],
                          'avg_points_game': len(teams) * [0],
                          'season': len(teams) * [0],
-                         'ELO': len(teams)*[elo_start_value]},
-                        index=len(teams)*[datetime.strptime('01-01-2000', '%d-%m-%Y')])
-teamData.index.name = 'Date'
+                         'ELO': len(teams)*[elo_start_value],
+                        'Date':len(teams)*[datetime.strptime('01-01-2000', '%d-%m-%Y')]
+})
 
 
 
@@ -137,22 +139,24 @@ def EloRating(homeElo, awayElo, outcome, k=20):
     return round(homeElo,2), round(awayElo,2)
 
 
+trend_length = 5
 
 points_mapping_home = {'H': 3, 'D': 1, 'A': 0} # resulting points for each possible game result
 points_mapping_away = {'H': 0, 'D': 1, 'A': 3}
 for index,row in df.loc[:,['Date','HomeTeam','AwayTeam','FTR','FTHG','FTAG','matchDay', 'first_match_day', 'season']].iterrows():
-    matching_teamData_home = teamData.loc[(teamData.Team == row[1]) & (teamData.index == teamData.loc[(teamData.Team == row[1])].index.max())]
-    matching_teamData_away = teamData.loc[(teamData.Team == row[2]) & (teamData.index == teamData.loc[(teamData.Team == row[2])].index.max())]
-    eloHome = matching_teamData_home.ELO[0]
-    eloAway = matching_teamData_away.ELO[0]
-    home_goals = matching_teamData_home.goals_scored[0]
-    home_conceded = matching_teamData_home.goals_conceded[0]
-    away_goals = matching_teamData_away.goals_scored[0]
-    away_conceded = matching_teamData_away.goals_conceded[0]
-    matchday_home = matching_teamData_home.matchDay[0]
-    matchday_away = matching_teamData_away.matchDay[0]
-    home_points_old = matching_teamData_home.points[0]
-    away_points_old = matching_teamData_away.points[0]
+    matching_teamData_home = teamData.loc[(teamData.Team == row[1]) & (teamData.Date == teamData.loc[(teamData.Team == row[1])].Date.max())]
+    matching_teamData_away = teamData.loc[(teamData.Team == row[2]) & (teamData.Date == teamData.loc[(teamData.Team == row[2])].Date.max())]
+
+    eloHome = matching_teamData_home.ELO.item()
+    eloAway = matching_teamData_away.ELO.item()
+    home_goals = matching_teamData_home.goals_scored.item()
+    home_conceded = matching_teamData_home.goals_conceded.item()
+    away_goals = matching_teamData_away.goals_scored.item()
+    away_conceded = matching_teamData_away.goals_conceded.item()
+    matchday_home = matching_teamData_home.matchDay.item()
+    matchday_away = matching_teamData_away.matchDay.item()
+    home_points_old = matching_teamData_home.points.item()
+    away_points_old = matching_teamData_away.points.item()
     home_result = row[3] # 'H', 'D' or 'A' for Home win, Draw and Away win
     home_points_new = points_mapping_home[home_result]
     away_points_new = points_mapping_away[home_result]
@@ -178,12 +182,18 @@ for index,row in df.loc[:,['Date','HomeTeam','AwayTeam','FTR','FTHG','FTAG','mat
                                                  'avg_goals_conceded': [0,0],
                                                  'points': [0,0],
                                                  'season': row[8],
-                                                 'avg_points_game': [0,0]
+                                                 'avg_points_game': [0,0],
+                                                 'elo_change_trend': [np.NaN, np.NaN],
+                                                 'goals_scored_trend': [np.NaN, np.NaN],
+                                                 'goals_conceded_trend': [np.NaN, np.NaN],
+                                                'Date':2*[row[0]-timedelta(days=14)]
+                                                }))
                                                 
-                                                },
-                                                index=2*[row[0]-timedelta(days=14)]), sort=False)
 
 
+
+
+    
     goalDiff = abs(row[4] - row[5])
     eloHome, eloAway = EloRating(eloHome, eloAway, row[3], k=20 + goalDiff**2)
     teamData = teamData.append(pd.DataFrame({'Team': [row[1], row[2]],
@@ -195,9 +205,59 @@ for index,row in df.loc[:,['Date','HomeTeam','AwayTeam','FTR','FTHG','FTAG','mat
                                              'avg_goals_conceded': [round((home_conceded+row[5])/(matchday_home+1),3), round((away_conceded+row[4])/(matchday_away+1),3)],
                                              'points': [home_points_old + home_points_new, away_points_old + away_points_new],
                                              'avg_points_game': [round((home_points_old + home_points_new)/(matchday_home+1),3), round((away_points_old + away_points_new)/(matchday_away+1),3)],
-                                             'season': row[8]
-                                            },
-                                            index=2*[row[0]]),  sort=False)
+                                             'season': row[8],
+                                             'elo_change_trend': [np.NaN, np.NaN],
+                                             'goals_scored_trend': [np.NaN, np.NaN],
+                                             'goals_conceded_trend': [np.NaN, np.NaN],
+                                             'Date':2*[row[0]], 
+                                             
+                                            }
+                                            
+                                           ,index = [len(teamData)-2, len(teamData)-1]
+                                           
+                                           ))
+                                            
+    
+
 
 
     
+    
+    if matchday_home > trend_length:
+        home_team_season = teamData.loc[(teamData.Team == row[1]) & (teamData.season == row[8])]
+    
+        eloChange_home =  round(home_team_season.loc[home_team_season.matchDay == matchday_home+1].ELO.item()
+                                - home_team_season.loc[home_team_season.matchDay == matchday_home+1-trend_length+1].ELO.item(),2)
+        
+        goals_scored_trend_home = round((home_team_season.loc[home_team_season.matchDay == matchday_home+1].goals_scored.item()
+                                - home_team_season.loc[home_team_season.matchDay == matchday_home+1-trend_length+1].goals_scored.item())/trend_length,2)
+        
+        goals_conceded_trend_home = round((home_team_season.loc[home_team_season.matchDay == matchday_home+1].goals_conceded.item()
+                                - home_team_season.loc[home_team_season.matchDay == matchday_home+1-trend_length+1].goals_conceded.item())/trend_length,2)
+        
+        teamData.at[teamData.index[-2], 'elo_change_trend'] = eloChange_home
+        teamData.at[teamData.index[-2], 'goals_scored_trend'] = goals_scored_trend_home
+        teamData.at[teamData.index[-2], 'goals_conceded_trend'] = goals_conceded_trend_home
+
+
+        
+    if matchday_away > trend_length:
+        away_team_season = teamData.loc[(teamData.Team == row[2]) & (teamData.season == row[8])]
+        
+        eloChange_away =  round(away_team_season.loc[away_team_season.matchDay == matchday_away+1].ELO.item()
+                                - away_team_season.loc[away_team_season.matchDay == matchday_away+1-trend_length+1].ELO.item(),2)
+        
+        goals_scored_trend_away = round((away_team_season.loc[away_team_season.matchDay == matchday_away+1].goals_scored.item()
+                                - away_team_season.loc[away_team_season.matchDay == matchday_away+1-trend_length+1].goals_scored.item())/trend_length,2)
+        
+        goals_conceded_trend_away = round((away_team_season.loc[away_team_season.matchDay == matchday_away+1].goals_conceded.item()
+                                - away_team_season.loc[away_team_season.matchDay == matchday_away+1-trend_length+1].goals_conceded.item())/trend_length,2)
+        
+        teamData.at[teamData.index[-1], 'elo_change_trend'] = eloChange_away
+        teamData.at[teamData.index[-1], 'goals_scored_trend'] = goals_scored_trend_away
+        teamData.at[teamData.index[-1], 'goals_conceded_trend'] = goals_conceded_trend_away
+
+
+
+
+
