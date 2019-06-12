@@ -3,20 +3,19 @@ import pandas as pd
 import math
 from datetime import datetime
 from datetime import timedelta
-#https://www.nytimes.com/2019/05/22/magazine/soccer-data-liverpool.html?utm_campaign=Data_Elixir&utm_medium=email&utm_source=Data_Elixir_235
-
-#ToDo: Merge with other dataset to get Match Day
-#ToDo: seperate table with ELO scores # Done
-#ToDo: Get official play-by-plays
 
 
-
-
-
-
+##########################################################################
+# Adjustable variables
+wd = "/Users/jjs/Dropbox/Programming/football_gambling/"
+csv_files = [wd + "PL_1617.csv", wd + "PL_1718.csv", wd + "/PL_1819.csv"]
+#csv_files = [wd + "/PL_1617.csv"]
+trend_length = 5
+elo_start_value = 1000
+elo_k = 20
+###########################################################################
 
 # import Premier League Data from seasons 1617 to 1819
-dateparse = lambda x: pd.datetime.strptime(x, '%d/%m/%Y') # define date format for pd read_csv
 
 def merge_data(csv_files, delimiter = ',', dateparser = dateparse, parse_dates = ['Date']):
     """
@@ -31,17 +30,20 @@ def merge_data(csv_files, delimiter = ',', dateparser = dateparse, parse_dates =
     """
     
     for csv in csv_files:
+        
+        # date formats in source data is slightly different (/2019 vs. /19), # TODO: check for better method to catch this error
         try:
-            df_new = pd.read_csv(csv, parse_dates=parse_dates ,date_parser=dateparser, delimiter=delimiter)
+            df_new = pd.read_csv(csv, parse_dates=parse_dates ,date_parser=lambda x: pd.datetime.strptime(x, '%d/%m/%Y'), delimiter=delimiter)
+            
         except:
             df_new = pd.read_csv(csv, parse_dates=parse_dates ,date_parser=lambda x: pd.datetime.strptime(x, '%d/%m/%y'), delimiter=delimiter)
+           
             
             
         df_new['season'] = df_new.Date.max().year # add season column, defined as the year of the last matchday
         df_new['first_match_day'] = False 
-        df_new['first_match_day'][0:10] = True
+        df_new.loc[0:9, 'first_match_day'] = True # declare first 10 games as first match day
         df_new['matchDay'] = 0
-        #df_new['matchDay'][0:10] = 1
         
         try:
             df = df.append(df_new,sort=False)
@@ -49,25 +51,17 @@ def merge_data(csv_files, delimiter = ',', dateparser = dateparse, parse_dates =
             df = df_new
         
     return df
-wd = "/Users/jjs/Dropbox/Programming/football_gambling/"
-csv_files = [wd + "PL_1617.csv", wd + "PL_1718.csv", wd + "/PL_1819.csv"]
-#csv_files = [wd + "/PL_1617.csv"]
 
 
 
-#df = pd.read_csv("/Users/jjs/Dropbox/Programming/football_gambling/PL_1819.csv", parse_dates=['Date'],date_parser=dateparse, delimiter=';')
 df = merge_data(csv_files)
 df.Date = pd.to_datetime(df.Date,unit='d') # convert from timestamp to datetime
 
-# make sure the data is sorted by Date in ascending order
-df.sort_index(ascending=True)
 
-# Get all PL teams in order of their first match day
-#teams = [x for sub in list(zip(df['HomeTeam'][:10],df['AwayTeam'][:10])) for x in sub]
+# get team name from all the seasons from the csv files
 teams = df.HomeTeam.unique()
 
-# define DataFrame 'elo' initialized with some elo initialization value and the date the team played first this season
-elo_start_value = 1000
+# initialize the df 'teamData' with an elo start value and a date that's 10 years before the first game in the source files
 teamData = pd.DataFrame({'Team': teams,
                          'goals_scored': len(teams) * [0],
                          'goals_conceded': len(teams) * [0],
@@ -76,7 +70,7 @@ teamData = pd.DataFrame({'Team': teams,
                          'avg_points_game': len(teams) * [0],
                          'season': len(teams) * [0],
                          'ELO': len(teams)*[elo_start_value],
-                        'Date':len(teams)*[datetime.strptime('01-01-2000', '%d-%m-%Y')]
+                        'Date':len(teams)*[min(df.Date) - timedelta(weeks = 52 * 10)]
 })
 
 
@@ -119,6 +113,7 @@ def EloRating(homeElo, awayElo, outcome, k=20):
     
     """
     # calculate winning probability of home and away team
+    # increase win probability for home teams, decrease it for away teams
     Ph = Probability(awayElo*0.95, homeElo*1.05)
     Pa = Probability(homeElo*1.05, awayElo*0.95)
     
@@ -139,10 +134,12 @@ def EloRating(homeElo, awayElo, outcome, k=20):
     return round(homeElo,2), round(awayElo,2)
 
 
-trend_length = 5
+
 
 points_mapping_home = {'H': 3, 'D': 1, 'A': 0} # resulting points for each possible game result
 points_mapping_away = {'H': 0, 'D': 1, 'A': 3}
+
+
 for index,row in df.loc[:,['Date','HomeTeam','AwayTeam','FTR','FTHG','FTAG','matchDay', 'first_match_day', 'season']].iterrows():
     matching_teamData_home = teamData.loc[(teamData.Team == row[1]) & (teamData.Date == teamData.loc[(teamData.Team == row[1])].Date.max())]
     matching_teamData_away = teamData.loc[(teamData.Team == row[2]) & (teamData.Date == teamData.loc[(teamData.Team == row[2])].Date.max())]
@@ -187,7 +184,8 @@ for index,row in df.loc[:,['Date','HomeTeam','AwayTeam','FTR','FTHG','FTAG','mat
                                                  'goals_scored_trend': [np.NaN, np.NaN],
                                                  'goals_conceded_trend': [np.NaN, np.NaN],
                                                 'Date':2*[row[0]-timedelta(days=14)]
-                                                }))
+                                                }
+                                               ,index = [len(teamData)-2, len(teamData)-1]))
                                                 
 
 
@@ -195,7 +193,7 @@ for index,row in df.loc[:,['Date','HomeTeam','AwayTeam','FTR','FTHG','FTAG','mat
 
     
     goalDiff = abs(row[4] - row[5])
-    eloHome, eloAway = EloRating(eloHome, eloAway, row[3], k=20 + goalDiff**2)
+    eloHome, eloAway = EloRating(eloHome, eloAway, row[3], k=elo_k + goalDiff**2)
     teamData = teamData.append(pd.DataFrame({'Team': [row[1], row[2]],
                                              'goals_scored': [home_goals+row[4], away_goals+row[5]],
                                              'goals_conceded': [home_conceded+row[5], away_conceded+row[4]],
