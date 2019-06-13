@@ -1,3 +1,15 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+"""
+Load the games from csv files from 'https://www.football-data.co.uk/data.php' &
+aggregate the data &
+create a DataFrame with each team after each match day with aggregate information
+such as elo ratings, average goals scored/games and trends like the conceded goals
+in the last 5 games
+"""
+
+
 import numpy as np
 import pandas as pd
 import math
@@ -34,12 +46,15 @@ def merge_data(csv_files, delimiter = ',', parse_dates = ['Date']):
     
     for csv in csv_files:
         
-        # date formats in source data is slightly different (/2019 vs. /19), # TODO: check for better method to catch this error
+        # date formats in source data is slightly different (/2019 vs. /19), 
+        # TODO: check for better method to catch this error
         try:
-            df_new = pd.read_csv(csv, parse_dates=parse_dates ,date_parser=lambda x: pd.datetime.strptime(x, '%d/%m/%Y'), delimiter=delimiter)
+            df_new = pd.read_csv(csv, parse_dates=parse_dates ,
+                                 date_parser=lambda x: pd.datetime.strptime(x, '%d/%m/%Y'), delimiter=delimiter)
             
         except:
-            df_new = pd.read_csv(csv, parse_dates=parse_dates ,date_parser=lambda x: pd.datetime.strptime(x, '%d/%m/%y'), delimiter=delimiter)
+            df_new = pd.read_csv(csv, parse_dates=parse_dates,
+                                 date_parser=lambda x: pd.datetime.strptime(x, '%d/%m/%y'), delimiter=delimiter)
            
             
             
@@ -64,7 +79,8 @@ df.Date = pd.to_datetime(df.Date,unit='d') # convert from timestamp to datetime
 # get team name from all the seasons from the csv files
 teams = df.HomeTeam.unique()
 
-# initialize the df 'teamData' with an elo start value and a date that's 10 years before the first game in the source files
+# initialize the df 'teamData' with an elo start value and a date that's 10 years
+#before the first game in the source files
 teamData = pd.DataFrame({'Team': teams,
                          'goals_scored': len(teams) * [0],
                          'goals_conceded': len(teams) * [0],
@@ -83,10 +99,7 @@ teamData = pd.DataFrame({'Team': teams,
                         }
                        )
 
-
-                                                
-
-
+                             
 
 
 # aggregate the odds from different oddsmakers with their median value
@@ -98,9 +111,12 @@ df['home_odds'] = df.loc[:,home_odds_cols].median(axis=1)
 df['draw_odds'] = df.loc[:,draw_odds_cols].median(axis=1)
 df['away_odds'] = df.loc[:,away_odds_cols].median(axis=1)
 
-cols_to_drop = home_odds_cols + away_odds_cols + draw_odds_cols + ['Div','Bb1X2','BbAH','BbAHh', 'BbMxH','BbMxD','BbMxA',
-                                                                   'BbMx>2.5','BbMx<2.5','BbMxAHH','BbMxAHA','BbAvH','BbAvD',
-                                                                   'BbAvA','BbAv>2.5','BbAv<2.5','BbAvAHH','BbAvAHA','BbOU','Referee', 'LBH','LBD','LBA' ]
+cols_to_drop = home_odds_cols + away_odds_cols + draw_odds_cols + ['Div','Bb1X2','BbAH','BbAHh',
+                                                                   'BbMxH','BbMxD','BbMxA',
+                                                                 'BbMx>2.5','BbMx<2.5','BbMxAHH',
+                                                                   'BbMxAHA','BbAvH','BbAvD',
+                                                                    'BbAvA','BbAv>2.5','BbAv<2.5','BbAvAHH',
+                                                                   'BbAvAHA','BbOU','Referee', 'LBH','LBD','LBA' ]
 
 
 
@@ -154,10 +170,14 @@ points_mapping_home = {'H': 3, 'D': 1, 'A': 0} # resulting points for each possi
 points_mapping_away = {'H': 0, 'D': 1, 'A': 3}
 
 
-
+# loop through all matches and add data to teamData for every team and every match
 for row in df.loc[:,['Date','HomeTeam','AwayTeam','FTR','FTHG','FTAG','matchDay', 'first_match_day', 'season']].itertuples():
-    matching_teamData_home = teamData.loc[(teamData.Team == row.HomeTeam) & (teamData.Date == teamData.loc[(teamData.Team == row.HomeTeam)].Date.max())]
-    matching_teamData_away = teamData.loc[(teamData.Team == row.AwayTeam) & (teamData.Date == teamData.loc[(teamData.Team == row.AwayTeam)].Date.max())]
+    
+    # locate matching home and away teams between df and teamdata
+    matching_teamData_home = teamData.loc[(teamData.Team == row.HomeTeam) &
+                                          (teamData.Date == teamData.loc[(teamData.Team == row.HomeTeam)].Date.max())]
+    matching_teamData_away = teamData.loc[(teamData.Team == row.AwayTeam) &
+                                          (teamData.Date == teamData.loc[(teamData.Team == row.AwayTeam)].Date.max())]
 
     eloHome = matching_teamData_home.ELO.item()
     eloAway = matching_teamData_away.ELO.item()
@@ -172,7 +192,9 @@ for row in df.loc[:,['Date','HomeTeam','AwayTeam','FTR','FTHG','FTAG','matchDay'
     home_result = row.FTR # 'H', 'D' or 'A' for Home win, Draw and Away win
     home_points_new = points_mapping_home[home_result]
     away_points_new = points_mapping_away[home_result]
-    if row.first_match_day == True: # if it's the first match day, adjust elo ratings
+    
+     # if it's the first match day, adjust elo ratings and reset stats for a new season
+    if row.first_match_day == True:
         eloHome = 0.9 * eloHome + 0.1 * elo_start_value
         eloAway = 0.9 * eloHome + 0.1 * elo_start_value
         home_goals = 0
@@ -181,9 +203,7 @@ for row in df.loc[:,['Date','HomeTeam','AwayTeam','FTR','FTHG','FTAG','matchDay'
         away_conceded = 0
         matchday_home = 0
         matchday_away = 0
-        #home_points_new = 0
         home_points_old = 0
-        #away_points_new = 0
         away_points_old = 0
         teamData = teamData.append(pd.DataFrame({'Team': [row.HomeTeam, row.AwayTeam],
                                                  'goals_scored':0,
@@ -206,18 +226,22 @@ for row in df.loc[:,['Date','HomeTeam','AwayTeam','FTR','FTHG','FTAG','matchDay'
 
 
 
-    
+    # the higher the goal difference in the match, the greater the elo change for both teams
     goalDiff = abs(row.FTHG - row.FTAG)
     eloHome, eloAway = EloRating(eloHome, eloAway, row.FTR, k=elo_k + goalDiff**2)
+    
     teamData = teamData.append(pd.DataFrame({'Team': [row.HomeTeam, row.AwayTeam],
                                              'goals_scored': [home_goals+row.FTHG, away_goals+row.FTAG],
                                              'goals_conceded': [home_conceded+row.FTAG, away_conceded+row.FTHG],
                                              'ELO': [eloHome,eloAway],
                                              'matchDay': [matchday_home+1, matchday_away+1],
-                                             'avg_goals_scored': [round((home_goals+row.FTHG)/(matchday_home+1),3), round((away_goals+row.FTAG)/(matchday_away+1),3)],
-                                             'avg_goals_conceded': [round((home_conceded+row.FTAG)/(matchday_home+1),3), round((away_conceded+row.FTHG)/(matchday_away+1),3)],
+                                             'avg_goals_scored': [round((home_goals+row.FTHG)/(matchday_home+1),3), 
+                                                                  round((away_goals+row.FTAG)/(matchday_away+1),3)],
+                                             'avg_goals_conceded': [round((home_conceded+row.FTAG)/(matchday_home+1),3),
+                                                                    round((away_conceded+row.FTHG)/(matchday_away+1),3)],
                                              'points': [home_points_old + home_points_new, away_points_old + away_points_new],
-                                             'avg_points_game': [round((home_points_old + home_points_new)/(matchday_home+1),3), round((away_points_old + away_points_new)/(matchday_away+1),3)],
+                                             'avg_points_game': [round((home_points_old + home_points_new)/(matchday_home+1),3),
+                                                                 round((away_points_old + away_points_new)/(matchday_away+1),3)],
                                              'season': row.season,
                                              'elo_change_trend': [np.NaN, np.NaN],
                                              'goals_scored_trend': [np.NaN, np.NaN],
@@ -232,10 +256,8 @@ for row in df.loc[:,['Date','HomeTeam','AwayTeam','FTR','FTHG','FTAG','matchDay'
                                             
     
 
-
-
-    
-    
+    # if the teams played enough games to calculate the trend, we calculate the average elo, scored and conceded goals in the last 'trend_length' games,
+    # !INCLUDING! the current one
     if matchday_home > trend_length:
         home_team_season = teamData.loc[(teamData.Team == row.HomeTeam) & (teamData.season == row.season)]
     
