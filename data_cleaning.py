@@ -8,8 +8,6 @@ create a DataFrame with each team after each match day with aggregate informatio
 such as elo ratings, average goals scored/games and trends like the conceded goals
 in the last 5 games
 """
-
-
 import numpy as np
 import pandas as pd
 import math
@@ -19,12 +17,13 @@ import warnings
 warnings.simplefilter(action='error', category=FutureWarning)
 
 pd.options.mode.chained_assignment = None # default = 'warn'
+pd.options.display.max_columns = 50
 
 ##########################################################################
 # Adjustable variables
 wd = "/Users/jjs/Dropbox/Programming/football_gambling/"
 csv_files = [wd + "PL_1617.csv", wd + "PL_1718.csv", wd + "/PL_1819.csv"]
-#csv_files = [wd + "/PL_1617.csv"]
+csv_files = [wd + "/PL_1617.csv"]
 trend_length = 5
 elo_start_value = 1000
 elo_k = 20
@@ -292,5 +291,10 @@ for row in df.loc[:,['Date','HomeTeam','AwayTeam','FTR','FTHG','FTAG','matchDay'
         teamData.at[teamData.index[-1], 'goals_scored_trend'] = goals_scored_trend_away
         teamData.at[teamData.index[-1], 'goals_conceded_trend'] = goals_conceded_trend_away
 
+        
+# create a DataFrame that can be used for training a model
+games_short = df.loc[: , ['Date', 'HomeTeam', 'AwayTeam', 'FTR', 'season', 'home_odds', 'draw_odds', 'away_odds']]
 
-
+games = games_short.merge(teamData, left_on = ['Date', 'HomeTeam'], right_on = ['Date', 'Team'], suffixes=('', '_home'))
+games = games.merge(teamData, left_on = ['Date', 'AwayTeam'], right_on = ['Date', 'Team'], suffixes=('', '_away'))
+games = games.drop(['Team', 'season_home', 'Team_away', 'season_away'], axis=1)
