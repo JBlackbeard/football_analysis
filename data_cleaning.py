@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
 """
@@ -14,6 +13,7 @@ import math
 from datetime import datetime
 from datetime import timedelta
 import warnings
+import config as cfg
 warnings.simplefilter(action='error', category=FutureWarning)
 
 pd.options.mode.chained_assignment = None # default = 'warn'
@@ -21,7 +21,7 @@ pd.options.display.max_columns = 50
 
 ##########################################################################
 # Adjustable variables
-wd = "/Users/jjs/Dropbox/Programming/football_gambling/"
+wd = cfg.wd
 csv_files = [wd + "PL_1617.csv", wd + "PL_1718.csv", wd + "/PL_1819.csv"]
 csv_files = [wd + "/PL_1617.csv"]
 trend_length = 5
@@ -298,3 +298,5 @@ games_short = df.loc[: , ['Date', 'HomeTeam', 'AwayTeam', 'FTR', 'season', 'home
 games = games_short.merge(teamData, left_on = ['Date', 'HomeTeam'], right_on = ['Date', 'Team'], suffixes=('', '_home'))
 games = games.merge(teamData, left_on = ['Date', 'AwayTeam'], right_on = ['Date', 'Team'], suffixes=('', '_away'))
 games = games.drop(['Team', 'season_home', 'Team_away', 'season_away'], axis=1)
+
+
