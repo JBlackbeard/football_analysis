@@ -1,7 +1,7 @@
-# -*- coding: utf-8 -*-
+#!/usr/bin/env python# -*- coding: utf-8 -*-
 
 """
-Load the games from csv files from 'https://www.football-data.co.uk/data.php' &
+Load the games from csv files from 'https://www.football-data.co.uk/englandm.php' &
 aggregate the data &
 create a DataFrame with each team after each match day with aggregate information
 such as elo ratings, average goals scored/games and trends like the conceded goals
@@ -22,8 +22,8 @@ pd.options.display.max_columns = 50
 ##########################################################################
 # Adjustable variables
 wd = cfg.wd
-csv_files = [wd + "PL_1617.csv", wd + "PL_1718.csv", wd + "/PL_1819.csv"]
-csv_files = [wd + "/PL_1617.csv"]
+csv_files = [ wd + "PL_1516.csv", wd + "PL_1617.csv", wd + "PL_1718.csv", wd + "PL_1819.csv"]
+#csv_files = [wd + "/PL_1617.csv"]
 trend_length = 5
 elo_start_value = 1000
 elo_k = 20
@@ -47,15 +47,18 @@ def merge_data(csv_files, delimiter = ',', parse_dates = ['Date']):
         
         # date formats in source data is slightly different (/2019 vs. /19), 
         # TODO: check for better method to catch this error
+        
+        
         try:
-            df_new = pd.read_csv(csv, parse_dates=parse_dates ,
-                                 date_parser=lambda x: pd.datetime.strptime(x, '%d/%m/%Y'), delimiter=delimiter)
+            df_new = pd.read_csv(csv, parse_dates=parse_dates,
+                                 date_parser=lambda x: pd.datetime.strptime(str(x), '%d/%m/%Y'), delimiter=delimiter)
             
         except:
             df_new = pd.read_csv(csv, parse_dates=parse_dates,
-                                 date_parser=lambda x: pd.datetime.strptime(x, '%d/%m/%y'), delimiter=delimiter)
+                                 date_parser=lambda x: pd.datetime.strptime(str(x), '%d/%m/%y'), delimiter=delimiter)
            
             
+
             
         df_new['season'] = df_new.Date.max().year # add season column, defined as the year of the last matchday
         df_new['first_match_day'] = False 
@@ -256,18 +259,18 @@ for row in df.loc[:,['Date','HomeTeam','AwayTeam','FTR','FTHG','FTAG','matchDay'
     
 
     # if the teams played enough games to calculate the trend, we calculate the average elo, scored and conceded goals in the last 'trend_length' games,
-    # !INCLUDING! the current one
+    # !NOT INCLUDING! the current one
     if matchday_home > trend_length:
         home_team_season = teamData.loc[(teamData.Team == row.HomeTeam) & (teamData.season == row.season)]
     
-        eloChange_home =  round(home_team_season.loc[home_team_season.matchDay == matchday_home+1].ELO.item()
-                                - home_team_season.loc[home_team_season.matchDay == matchday_home+1-trend_length+1].ELO.item(),2)
+        eloChange_home =  round(home_team_season.loc[home_team_season.matchDay == matchday_home].ELO.item()
+                                - home_team_season.loc[home_team_season.matchDay == matchday_home-trend_length+1].ELO.item(),2)
         
-        goals_scored_trend_home = round((home_team_season.loc[home_team_season.matchDay == matchday_home+1].goals_scored.item()
-                                - home_team_season.loc[home_team_season.matchDay == matchday_home+1-trend_length+1].goals_scored.item())/trend_length,2)
+        goals_scored_trend_home = round((home_team_season.loc[home_team_season.matchDay == matchday_home].goals_scored.item()
+                                - home_team_season.loc[home_team_season.matchDay == matchday_home-trend_length+1].goals_scored.item())/trend_length,2)
         
-        goals_conceded_trend_home = round((home_team_season.loc[home_team_season.matchDay == matchday_home+1].goals_conceded.item()
-                                - home_team_season.loc[home_team_season.matchDay == matchday_home+1-trend_length+1].goals_conceded.item())/trend_length,2)
+        goals_conceded_trend_home = round((home_team_season.loc[home_team_season.matchDay == matchday_home].goals_conceded.item()
+                                - home_team_season.loc[home_team_season.matchDay == matchday_home-trend_length+1].goals_conceded.item())/trend_length,2)
         
         teamData.at[teamData.index[-2], 'elo_change_trend'] = eloChange_home
         teamData.at[teamData.index[-2], 'goals_scored_trend'] = goals_scored_trend_home
@@ -278,14 +281,14 @@ for row in df.loc[:,['Date','HomeTeam','AwayTeam','FTR','FTHG','FTAG','matchDay'
     if matchday_away > trend_length:
         away_team_season = teamData.loc[(teamData.Team == row.AwayTeam) & (teamData.season == row.season)]
         
-        eloChange_away =  round(away_team_season.loc[away_team_season.matchDay == matchday_away+1].ELO.item()
-                                - away_team_season.loc[away_team_season.matchDay == matchday_away+1-trend_length+1].ELO.item(),2)
+        eloChange_away =  round(away_team_season.loc[away_team_season.matchDay == matchday_away].ELO.item()
+                                - away_team_season.loc[away_team_season.matchDay == matchday_away-trend_length+1].ELO.item(),2)
         
-        goals_scored_trend_away = round((away_team_season.loc[away_team_season.matchDay == matchday_away+1].goals_scored.item()
-                                - away_team_season.loc[away_team_season.matchDay == matchday_away+1-trend_length+1].goals_scored.item())/trend_length,2)
+        goals_scored_trend_away = round((away_team_season.loc[away_team_season.matchDay == matchday_away].goals_scored.item()
+                                - away_team_season.loc[away_team_season.matchDay == matchday_away-trend_length+1].goals_scored.item())/trend_length,2)
         
-        goals_conceded_trend_away = round((away_team_season.loc[away_team_season.matchDay == matchday_away+1].goals_conceded.item()
-                                - away_team_season.loc[away_team_season.matchDay == matchday_away+1-trend_length+1].goals_conceded.item())/trend_length,2)
+        goals_conceded_trend_away = round((away_team_season.loc[away_team_season.matchDay == matchday_away].goals_conceded.item()
+                                - away_team_season.loc[away_team_season.matchDay == matchday_away-trend_length+1].goals_conceded.item())/trend_length,2)
         
         teamData.at[teamData.index[-1], 'elo_change_trend'] = eloChange_away
         teamData.at[teamData.index[-1], 'goals_scored_trend'] = goals_scored_trend_away
@@ -300,3 +303,5 @@ games = games.merge(teamData, left_on = ['Date', 'AwayTeam'], right_on = ['Date'
 games = games.drop(['Team', 'season_home', 'Team_away', 'season_away'], axis=1)
 
 
+# save as csv
+games.to_csv(cfg.wd + "games.csv", index=False)
